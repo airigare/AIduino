@@ -65,8 +65,8 @@ const unsigned long
 #define WEBPAGE      "/mikmakAPI/airigare/Station/Status"
 #define PORT         3000
 
-//#define MAX_SLEEP_ITERATIONS 75
-#define MAX_SLEEP_ITERATIONS 8
+#define MAX_SLEEP_ITERATIONS 75
+//#define MAX_SLEEP_ITERATIONS 8
 
 /**************************************************************************/
 /*!
@@ -324,10 +324,11 @@ unsigned long startTime = millis();
   }
 
   // Extract values
-  Serial.println(F("Response:"));
-  Serial.println(root["pumpTime"].as<char*>());
-  delay(100);
+  Serial.println(F("Response: "));
   r = root["pumpTime"];
+  Serial.println((r));
+  delay(100);
+  
   //Serial.println(root["data"][0].as<char*>());
   //Serial.println(root["data"][1].as<char*>());
             }
