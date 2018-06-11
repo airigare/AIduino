@@ -62,11 +62,14 @@ const unsigned long
 
 // What page to grab!
 #define WEBSITE      "www.mikmak.cc"
-#define WEBPAGE      "/mikmakAPI/airigare/Station/Status"
 #define PORT         3000
 
-#define MAX_SLEEP_ITERATIONS 75
-//#define MAX_SLEEP_ITERATIONS 8
+#define SLEEP_DURATION 60
+
+  int MAXsleepIterations, pumpTime, sleepIterations;
+  char* pumpTimeC;
+
+#define API  "79cf6c22-dcc6-11e5-8e77-00113217113f"
 
 /**************************************************************************/
 /*!
@@ -75,28 +78,27 @@ const unsigned long
 */
 /**************************************************************************/
 
-char
+  char
   country[20],
   region[20],
   city[20],
   name[13],  // Temp space for name:value parsing
   value[64]; // Temp space for name:value parsing
-float
+  float
   longitude, latitude;
 
-uint32_t ip = 0L, t;
-
-int sleepIterations;
+  uint32_t ip = 0L, t;
 
 void software_Reset() // Restarts program from beginning but does not reset the peripherals and registers
 {
-asm volatile ("  jmp 0");  
+  asm volatile ("  jmp 0");  
 }
 
 // On error, print PROGMEM string to serial monitor and stop
 void hang(const __FlashStringHelper *str) {
   Serial.println(str);
-  for(;;);
+  //for(;;);
+  software_Reset();
 }
 
 
@@ -104,7 +106,9 @@ void hang(const __FlashStringHelper *str) {
 // Return true if enabled and connected, false otherwise.
 boolean enableWiFi() {
   Serial.print(("Initializing CC3000..."));
-  if(!cc3000.begin()) { hang(F("failed.")); } else {Serial.print(F("OK\r\n"));};
+
+  for(t=millis(); !cc3000.begin() && ((millis() - t) < dhcpTimeout); delay(100));
+  if(!cc3000.begin()) { hang(F("failed.")); } else { Serial.print(F("OK\r\n")); };
 
   Serial.print(("Deleting old connection profiles..."));
   if(!cc3000.deleteProfiles()) { hang(F("failed.")); } else {Serial.print(F("OK\r\n"));};
@@ -116,7 +120,7 @@ boolean enableWiFi() {
   Serial.print(("Requesting address from DHCP server..."));
   
   for(t=millis(); !cc3000.checkDHCP() && ((millis() - t) < dhcpTimeout); delay(100));
-  if(!cc3000.checkDHCP()) { hang(F("failed.")); } else { Serial.print(F("OK\r\n")); };
+    if(!cc3000.checkDHCP()) { hang(F("failed.")); } else { Serial.print(F("OK\r\n")); };
 
 
   /* Display the IP address DNS, Gateway, etc. */  
@@ -139,8 +143,8 @@ void shutdownWiFi() {
   // Wait for the CC3000 to finish disconnecting before
   // continuing.
 
-    Serial.println(("Disconnecting...")); 
-    cc3000.disconnect();
+  Serial.println(("Disconnecting...")); 
+  cc3000.disconnect();
   
   // Shut down the CC3000.
   wlan_stop();
@@ -170,7 +174,7 @@ bool displayConnectionDetails(void) {
 }
 
 uint32_t getIP (void) {
-    ip = 0;
+  ip = 0;
   // Try looking up the website's IP address
   Serial.print(WEBSITE); Serial.print(F(" -> "));
   while (ip == 0) {
@@ -193,13 +197,25 @@ uint32_t getIP (void) {
     @ Call Mom
 */
 bool callMama() {
+  logStatus("101","1");
+  return true;
+}
+
+
+bool logStatus(char* id, char*(value)) {
 
   uint32_t ip = getIP();
 
   Adafruit_CC3000_Client www = cc3000.connectTCP(ip, PORT);
   if (www.connected()) {
     www.fastrprint(F("GET "));
-    www.fastrprint(WEBPAGE);
+    www.fastrprint("/mikmakAPI/airigare/Station/Status");
+    www.fastrprint("?API=");
+    www.fastrprint(API);
+    www.fastrprint("&id=");
+    www.fastrprint(id);
+    www.fastrprint("&value=");
+    www.fastrprint(value);
     www.fastrprint(F(" HTTP/1.1\r\n"));
     www.fastrprint(F("Host: ")); www.fastrprint(WEBSITE); www.fastrprint(F("\r\n"));
     www.fastrprint(F("\r\n"));
@@ -214,48 +230,48 @@ bool callMama() {
   // Note that if you're sending a lot of data you
   // might need to tweak the delay here so the CC3000 has
   // time to finish sending all the data before shutdown.
-Serial.print(F("OK\r\nAwaiting response..."));
-unsigned long startTime = millis();
-  while((!www.available()) &&
-            ((millis() - startTime) < responseTimeout));
-            {
-  
+  Serial.print(F("OK\r\nAwaiting response..."));
+  unsigned long startTime = millis();
+  while((!www.available()) && ((millis() - startTime) < responseTimeout));
+  {
+
   // Close the connection to the server.
   // Check HTTP status
-  char status[32] = {0};
-  www.readBytesUntil('\r', status, sizeof(status));
-  if (strcmp(status, "HTTP/1.1 200 OK") != 0) {
-    Serial.print(F("Unexpected response: "));
-    Serial.println(status);
-    return true;
-  }
+    char status[32] = {0};
+    www.readBytesUntil('\r', status, sizeof(status));
+    if (strcmp(status, "HTTP/1.1 200 OK") != 0) {
+      Serial.print(F("Unexpected response: "));
+      Serial.println(status);
+      return true;
+    }
 
   // Skip HTTP headers
-  char endOfHeaders[] = "\r\n\r\n";
-  if (!www.find(endOfHeaders)) {
-    Serial.println(F("Invalid response"));
-    return true;
-  }
+    char endOfHeaders[] = "\r\n\r\n";
+    if (!www.find(endOfHeaders)) {
+      Serial.println(F("Invalid response"));
+      return true;
+    }
 
   // Allocate JsonBuffer
   // Use arduinojson.org/assistant to compute the capacity.
-  const size_t capacity = JSON_OBJECT_SIZE(3) + JSON_ARRAY_SIZE(2) + 60;
-  DynamicJsonBuffer jsonBuffer(capacity);
+    const size_t capacity = JSON_OBJECT_SIZE(3) + JSON_ARRAY_SIZE(2) + 60;
+    DynamicJsonBuffer jsonBuffer(capacity);
 
   // Parse JSON object
-  JsonObject& root = jsonBuffer.parseObject(www);
-  if (!root.success()) {
-    Serial.println(F("Parsing failed!"));
-    return true;
-  }
+    JsonObject& root = jsonBuffer.parseObject(www);
+    if (!root.success()) {
+      Serial.println(F("Parsing failed!"));
+      return true;
+    }
 
   // Extract values
-  Serial.println(F("Response:"));
-  Serial.println(root["fieldCount"].as<char*>());
-  Serial.println(root["affectedRows"].as<char*>());
-  //Serial.println(root["data"][0].as<char*>());
-  //Serial.println(root["data"][1].as<char*>());
-            }
+    Serial.println(F("Response:"));
+    Serial.println(root["fieldCount"].as<char*>());
+    Serial.println(root["affectedRows"].as<char*>());
+
+    Serial.println(F("Pizdets!"));
+    delay(1000);
+  }
   
   www.close();
   return true;
@@ -263,18 +279,19 @@ unsigned long startTime = millis();
 
 /**************************************************************************/
 /*!
-    @ Get Watering
+    @ Get Instructions
 */
-long getPumpTime() {
+bool getInstructions() {
 
-  long r;
+  bool r;
 
-uint32_t ip = getIP();
+  uint32_t ip = getIP();
 
   Adafruit_CC3000_Client www = cc3000.connectTCP(ip, PORT);
   if (www.connected()) {
     www.fastrprint(F("GET "));
-    www.fastrprint("/mikmakAPI/airigare/Station/getPumpTime");
+    www.fastrprint("/mikmakAPI/airigare/Station/getInstructions?API=");
+    www.fastrprint(API);
     www.fastrprint(F(" HTTP/1.1\r\n"));
     www.fastrprint(F("Host: ")); www.fastrprint(WEBSITE); www.fastrprint(F("\r\n"));
     www.fastrprint(F("\r\n"));
@@ -288,63 +305,66 @@ uint32_t ip = getIP();
   // Note that if you're sending a lot of data you
   // might need to tweak the delay here so the CC3000 has
   // time to finish sending all the data before shutdown.
-Serial.print(F("OK\r\nAwaiting response..."));
-unsigned long startTime = millis();
-  while((!www.available()) &&
-            ((millis() - startTime) < responseTimeout));
-            {
-  
+  Serial.print(F("OK\r\nAwaiting response..."));
+  unsigned long startTime = millis();
+  while((!www.available()) && ((millis() - startTime) < responseTimeout));
+  {
+
   // Close the connection to the server.
   // Check HTTP status
-  char status[32] = {0};
-  www.readBytesUntil('\r', status, sizeof(status));
-  if (strcmp(status, "HTTP/1.1 200 OK") != 0) {
-    Serial.print(F("Unexpected response: "));
-    Serial.println(status);
-    return;
-  }
+    char status[32] = {0};
+    www.readBytesUntil('\r', status, sizeof(status));
+    if (strcmp(status, "HTTP/1.1 200 OK") != 0) {
+      Serial.print(F("Unexpected response: "));
+      Serial.println(status);
+      return false;
+    }
 
   // Skip HTTP headers
-  char endOfHeaders[] = "\r\n\r\n";
-  if (!www.find(endOfHeaders)) {
-    Serial.println(F("Invalid response"));
-    return;
-  }
+    char endOfHeaders[] = "\r\n\r\n";
+    if (!www.find(endOfHeaders)) {
+      Serial.println(F("Invalid response"));
+      return false;
+    }
 
   // Allocate JsonBuffer
   // Use arduinojson.org/assistant to compute the capacity.
-  const size_t capacity = JSON_OBJECT_SIZE(3) + JSON_ARRAY_SIZE(2) + 60;
-  DynamicJsonBuffer jsonBuffer(capacity);
+    const size_t capacity = JSON_OBJECT_SIZE(2) + 40;
+    DynamicJsonBuffer jsonBuffer(capacity);
 
   // Parse JSON object
-  JsonObject& root = jsonBuffer.parseObject(www);
-  if (!root.success()) {
-    Serial.println(F("Parsing failed!"));
-    return;
-  }
+    JsonObject& root = jsonBuffer.parseObject(www);
+    if (!root.success()) {
+      Serial.println(F("Parsing failed!"));
+      return false;
+    }
 
   // Extract values
-  Serial.println(F("Response: "));
-  r = root["pumpTime"];
-  Serial.println((r));
-  delay(100);
-  
-  //Serial.println(root["data"][0].as<char*>());
-  //Serial.println(root["data"][1].as<char*>());
-            }
-  
+    Serial.println(F("Response: "));
+    MAXsleepIterations = root["sleepIterations"];
+    pumpTime = root["pumpTime"];
+    pumpTimeC = root["pumpTime"];
+    delay(100);
+  }
+
+  Serial.println(F("Pizdets!"));
+  delay(1000);
   www.close();
-  return r;
+  return true;
 }
 
-void enablePump(int pumpTime) {
+bool enablePump(int pumpTime, char* pumpTimeC) {
   Serial.print("Start Pumping for: "); Serial.println(pumpTime, DEC);
   digitalWrite(RELAIS_PIN, HIGH);
   for(int x = 0; x < pumpTime; x = x + 1){
-delay(1000);
-}
-digitalWrite(RELAIS_PIN, LOW);
-Serial.print("Stop Pumping");
+    delay(1000);
+  }
+  digitalWrite(RELAIS_PIN, LOW);
+  Serial.print("Stop Pumping");
+
+logStatus("109", pumpTimeC);
+  
+  return true;
 }
 
 void setup(void)
@@ -354,11 +374,13 @@ void setup(void)
 
   Serial.print("Free RAM: "); Serial.println(getFreeRam(), DEC);
 
-    pinMode(RELAIS_PIN, OUTPUT);
+  pinMode(RELAIS_PIN, OUTPUT);
   delay(100);
   digitalWrite(RELAIS_PIN, HIGH);
   delay(1000);
   digitalWrite(RELAIS_PIN, LOW);
+
+  MAXsleepIterations = SLEEP_DURATION / 8;
   
 }
 
@@ -366,25 +388,25 @@ void loop(void)
 {
   if (sleepIterations == 0) {
     if (enableWiFi()) {
-      
+
       Serial.print(F("Calling Mama... "));
       if(!callMama()) { hang(F("failed.")); } else {Serial.print(F("OK\r\n"));};
       
-      Serial.print(F("Get Pump Time... "));
-      int pumpTime = int(getPumpTime());
-      if(pumpTime > 0) { Serial.print(F("OK\r\n")); } else {Serial.print(F("nOK\r\n"));};
-      if(pumpTime > 0) enablePump(pumpTime);
+      Serial.print(F("Get Instructions... "));
+      
+      if(getInstructions()) { Serial.print(F("OK\r\n")); } else {Serial.print(F("nOK\r\n"));};
+      if(pumpTime > 0) enablePump(pumpTime, pumpTimeC);
       
     }
     shutdownWiFi();
   }
   
-  else if (sleepIterations > 0 && sleepIterations < MAX_SLEEP_ITERATIONS) {
+  else if (sleepIterations > 0 && sleepIterations < MAXsleepIterations) {
           // Go to sleep!
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
 
   }
-  else if (sleepIterations >= MAX_SLEEP_ITERATIONS) {
+  else if (sleepIterations >= MAXsleepIterations) {
     software_Reset();
   }
 
