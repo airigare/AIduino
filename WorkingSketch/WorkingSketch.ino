@@ -51,6 +51,7 @@ Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, ADAFRUIT_CC3000_IRQ
 #define WLAN_SECURITY   WLAN_SEC_WPA2
 
 #define RELAIS_PIN 3
+#define WIFI_PIN 4
 
 #define IDLE_TIMEOUT_MS  3000      // Amount of time to wait (in milliseconds) with no data 
                                    // received before closing the connection.  If you know the server
@@ -61,7 +62,7 @@ const unsigned long
   responseTimeout = 15L * 1000L; // Max time to wait for data from server
 
 // What page to grab!
-#define WEBSITE      "www.mikmak.cc"
+#define WEBSITE      "www.elib.ch"
 #define PORT         3000
 
 #define SLEEP_DURATION 60
@@ -105,6 +106,11 @@ void hang(const __FlashStringHelper *str) {
 
 // Return true if enabled and connected, false otherwise.
 boolean enableWiFi() {
+    pinMode(WIFI_PIN, OUTPUT);
+  delay(1000);
+  digitalWrite(WIFI_PIN, HIGH);
+  delay(100);
+  
   Serial.print(("Initializing CC3000..."));
 
   for(t=millis(); !cc3000.begin() && ((millis() - t) < dhcpTimeout); delay(100));
@@ -151,6 +157,9 @@ void shutdownWiFi() {
   
   Serial.println(F("CC3000 shut down.")); 
   delay(100);
+
+    digitalWrite(WIFI_PIN, LOW);
+    delay(100);
 }
 
 /**************************************************************************/
