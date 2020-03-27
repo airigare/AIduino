@@ -46,10 +46,21 @@ Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, ADAFRUIT_CC3000_IRQ
                                          SPI_CLOCK_DIVIDER); // you can change this clock speed
 
 
+#define WLAN_SSID       "bawdiestNet"           // cannot be longer than 32 characters!
+//#define WLAN_SSID       "TP-LINK_Extender_2.4GHz"           // cannot be longer than 32 characters!
+#define WLAN_PASS       "Nkensleg8"
+
+
+/*
+#define WLAN_SSID       "iPhone"           // cannot be longer than 32 characters!
+#define WLAN_PASS       "vq09e7u07qicm"
+*/
+
 
 // Security can be WLAN_SEC_UNSEC, WLAN_SEC_WEP, WLAN_SEC_WPA or WLAN_SEC_WPA2
 #define WLAN_SECURITY   WLAN_SEC_WPA2
 
+#define RESET_PIN 1
 #define RELAIS_PIN 3
 #define WIFI_PIN 4
 
